@@ -159,6 +159,8 @@ classes = (
 
 
 def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
     Material.i3d_visualized = BoolProperty(
         name="Visualized",
         description="Indicates if the material is being visualized by the I3D Material Visualizer",
@@ -166,8 +168,6 @@ def register():
         update=update_visualize_material
     )
     Scene.i3d_material = PointerProperty(type=I3DMaterial_SceneProperties)
-    for cls in classes:
-        bpy.utils.register_class(cls)
 
 
 def unregister():
