@@ -625,6 +625,9 @@ def visualize_material(mat):
 
 
 def update_visualize_material(self, context):
+    if get_fs25_data_path() is None:
+        bpy.ops.i3d_material_visualizer.warning_popup('INVOKE_DEFAULT', message="FS25 Data Path is not set. ")
+        return
     mat = self
     if self.i3d_visualized:
         if 'FS25_VehicleShader' in mat.node_tree.nodes:
