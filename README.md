@@ -1,6 +1,6 @@
 # FS25 Vehicle Shader Visualizer
 
-### Supports only Unofficial I3D Exoporter
+### Supports only [Unofficial I3D Exporter](https://github.com/StjerneIdioten/I3D-Blender-Addon/releases)
 
 ### !!! For correct work, fs25 data path must be set in Blender preferences.
 
