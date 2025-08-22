@@ -23,7 +23,7 @@ class I3DMaterial_AddonPreferences(AddonPreferences):
 
     fs25_data_path: StringProperty(
         name="FS 25 Data Path",
-        default="F:\\SteamLibrary\\steamapps\\common\\Farming Simulator 25\data\\",
+        default="",
         subtype='DIR_PATH',
     )
 
