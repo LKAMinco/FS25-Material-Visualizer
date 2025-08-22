@@ -27,25 +27,25 @@ NODE_SETTINGS = {
         'type': 'ShaderNodeGroup',
         'group': 'FS25_VehicleShader',
         'to_node': ('BSDF.Material Output.Surface', 'Resolution.point0'),
-        'from_node': ('Diffuse.Diffuse.Color',
-                      'Specular.Specular.Color',
-                      'Normal.Normal.Color',
-                      'Alpha.Diffuse.Color',
-                      'Detail Diffuse.Detail Diffuse.Color',
-                      'Detail Specular.Detail Specular.Color',
-                      'Detail Normal.Detail Normal.Color'
-                      'uv0.uv0_diff.Vector',
-                      'uv1.uv1_spec.Vector',
-                      'uv2.uv2_norm.Vector',),
+        'from_node': (  # 'Diffuse.Diffuse.Color',
+            # 'Specular.Specular.Color',
+            # 'Normal.Normal.Color',
+            # 'Alpha.Diffuse.Color',
+            'Detail Diffuse.Detail Diffuse.Color',
+            'Detail Specular.Detail Specular.Color',
+            'Detail Normal.Detail Normal.Color'
+            'uv0.uv0_diff.Vector',
+            'uv1.uv1_spec.Vector',
+            'uv2.uv2_norm.Vector',),
     },
     'Normal Map': {
-        'location': (-20, 380),
+        'location': (-20, 340),
         'type': 'ShaderNodeNormalMap',
         'to_node': ('Normal.Principled BSDF.Normal',),
         'from_node': ('Color.Normal.Color',),
     },
     'Glossmap': {
-        'location': (-20, 340),
+        'location': (-20, 380),
         'type': 'ShaderNodeSeparateColor',
         'from_node': ('Color.Specular.Color',),
     },
@@ -331,6 +331,7 @@ def set_image(image, image_node, color_space='Color'):
             image_node.image.colorspace_settings.name = 'Non-Color'
 
     except RuntimeError:
+        pass
         print(f"Could not load image {image.name} from {image.filepath}")
 
 
@@ -345,21 +346,27 @@ def update_detail_map(mat, mode='GET'):
 
     if diffuse := mat.node_tree.nodes.get('Detail Diffuse'):
         if mode == 'GET':
-            image = load_custom_image(mat.i3d_attributes.shader_material_textures[2].source)
+            texture = mat.i3d_attributes.shader_material_textures[2]
+            src_path = texture.source if texture.source else texture.default_source
+            image = load_custom_image(src_path)
             set_image(image, diffuse)
         else:
             mat.i3d_attributes.shader_material_textures[2].source = diffuse.image.filepath if diffuse.image else ''
 
     if normal := mat.node_tree.nodes.get('Detail Normal'):
         if mode == 'GET':
-            image = load_custom_image(mat.i3d_attributes.shader_material_textures[1].source)
+            texture = mat.i3d_attributes.shader_material_textures[1]
+            src_path = texture.source if texture.source else texture.default_source
+            image = load_custom_image(src_path)
             set_image(image, normal, 'Non-Color')
         else:
             mat.i3d_attributes.shader_material_textures[1].source = normal.image.filepath if normal.image else ''
 
     if specular := mat.node_tree.nodes.get('Detail Specular'):
         if mode == 'GET':
-            image = load_custom_image(mat.i3d_attributes.shader_material_textures[0].source)
+            texture = mat.i3d_attributes.shader_material_textures[0]
+            src_path = texture.source if texture.source else texture.default_source
+            image = load_custom_image(src_path)
             set_image(image, specular, 'Non-Color')
         else:
             mat.i3d_attributes.shader_material_textures[0].source = specular.image.filepath if specular.image else ''
@@ -437,7 +444,7 @@ def link_node(node, path_, mat, from_node=True):
     links.new(src_socket, dst_socket)
 
 
-def set_node_and_links(mat, name, node=None):
+def set_node_and_links(mat, name, node=None, skip_link=False):
     node_params = NODE_SETTINGS.get(name)
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
@@ -455,15 +462,18 @@ def set_node_and_links(mat, name, node=None):
     node.label = name
 
     # clear_node_links(node, links)
-
     from_node = node_params.get('from_node')
     if from_node is not None:
         for path_ in from_node:
+            if skip_link and 'FS25_VehicleShader' in path_:
+                continue
             link_node(node, path_, mat)
 
     to_node = node_params.get('to_node')
     if to_node is not None:
         for path_ in to_node:
+            if skip_link and 'FS25_VehicleShader' in path_:
+                continue
             link_node(node, path_, mat, from_node=False)
 
     uv = node_params.get('preferred_uv')
@@ -507,9 +517,9 @@ def visualize_material(mat):
     # Diffuse
     if principled_bsdf.inputs.get('Base Color').links:
         diffuse = principled_bsdf.inputs['Base Color'].links[0].from_node
-        set_node_and_links(mat, 'Diffuse', diffuse)
+        set_node_and_links(mat, 'Diffuse', diffuse, skip_link=diffuse.image is None)
     else:
-        diffuse = set_node_and_links(mat, 'Diffuse')
+        diffuse = set_node_and_links(mat, 'Diffuse', skip_link=True)
 
     if diffuse.inputs.get('Vector').links:
         uv = diffuse.inputs['Vector'].links[0].from_node
@@ -551,9 +561,9 @@ def visualize_material(mat):
     gloss_map = set_node_and_links(mat, 'Glossmap')
     if gloss_map.inputs.get('Color').links:
         specular = gloss_map.inputs['Color'].links[0].from_node
-        set_node_and_links(mat, 'Specular', specular)
+        set_node_and_links(mat, 'Specular', specular, skip_link=specular.image is None)
     else:
-        specular = set_node_and_links(mat, 'Specular')
+        specular = set_node_and_links(mat, 'Specular', skip_link=True)
 
     if specular.image is not None:
         specular.image.colorspace_settings.name = 'Non-Color'
@@ -572,9 +582,9 @@ def visualize_material(mat):
     normal_map = set_node_and_links(mat, 'Normal Map')
     if normal_map.inputs.get('Color').links:
         normal = normal_map.inputs['Color'].links[0].from_node
-        set_node_and_links(mat, 'Normal', normal)
+        set_node_and_links(mat, 'Normal', normal, skip_link=normal.image is None)
     else:
-        normal = set_node_and_links(mat, 'Normal')
+        normal = set_node_and_links(mat, 'Normal', skip_link=True)
 
     if normal.image is not None:
         normal.image.colorspace_settings.name = 'Non-Color'

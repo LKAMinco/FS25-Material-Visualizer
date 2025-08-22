@@ -1,10 +1,10 @@
 import bpy
 from bpy.props import StringProperty, BoolProperty, PointerProperty
-from bpy.types import (Operator, AddonPreferences, PropertyGroup,
+from bpy.types import (Operator, Panel, AddonPreferences, PropertyGroup,
                        Scene, Material)
 
 from .util import update_visualize_material, print, get_param, get_set_params, set_param, update_detail_map, \
-    update_mask
+    update_mask, get_fs25_data_path
 
 bl_info = {
     "name": "I3D Material Visualizer",
@@ -23,7 +23,7 @@ class I3DMaterial_AddonPreferences(AddonPreferences):
 
     fs25_data_path: StringProperty(
         name="FS 25 Data Path",
-        default="",
+        default="F:\\SteamLibrary\\steamapps\\common\\Farming Simulator 25\data\\",
         subtype='DIR_PATH',
     )
 
@@ -96,12 +96,12 @@ class I3DMaterial_OperatorGetSet(Operator):
         if self.single_param:
             get_param(self.single_param, material) if self.mode == 'GET' else set_param(self.single_param, material)
         else:
-            print(material)
             get_set_params(skip_color_scale=self.skip_color_scale,
                            only_color_scale=self.only_color_scale,
                            mode=self.mode,
                            material=material)
-            update_detail_map(context.object.active_material, mode=self.mode)
+            if not self.only_color_scale:
+                update_detail_map(material, mode=self.mode)
 
         return {'FINISHED'}
 
@@ -150,8 +150,126 @@ class I3DMaterial_SceneProperties(PropertyGroup):
         update=update_mask('Wetness')
     )
 
+    src_material: PointerProperty(
+        name="Source Material",
+        description="Source material for the copy operation",
+        type=Material
+    )
 
-class I3DMaterial_OT_WarningPopup(bpy.types.Operator):
+    dst_material: PointerProperty(
+        name="Destination Material",
+        description="Destination material for the copy operation",
+        type=Material
+    )
+
+
+class I3DMaterial_PT_Panel(Panel):
+    bl_label = "I3D Material Visualizer"
+    bl_idname = "I3D_MATERIAL_PT_panel"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "material"
+    bl_category = "I3D Material"
+
+    def draw(self, context):
+        layout = self.layout
+        scene_props = context.scene.i3d_material
+
+        layout.prop(scene_props, "src_material", text="Src Mat")
+        layout.prop(scene_props, "dst_material", text="Dst Mat")
+        layout.operator("i3d_material_visualizer.copy_attributes", text="Copy Attributes")
+        layout.separator()
+        row = layout.row(align=True)
+        row.operator("i3d_material_visualizer.visualize_all", text="Visualize All Materials").enable = True
+        row.operator("i3d_material_visualizer.visualize_all", text="Disable All Materials").enable = False
+        layout.separator()
+
+
+class I3DMaterial_OT_CopyAttributes(Operator):
+    bl_idname = "i3d_material_visualizer.copy_attributes"
+    bl_label = "Copy Material Attributes"
+    bl_description = "Copy attributes from source material to destination material"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    skip_color_scale: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
+    only_color_scale: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
+
+    @classmethod
+    def description(cls, context, properties):
+        settings = ("• Hold Shift: Skip color scale\n"
+                    "• Hold Ctrl: Only apply color scale\n")
+        return "Copy attributes from source material to destination material.\n" + settings
+
+    @classmethod
+    def poll(cls, context):
+        scene_props = context.scene.i3d_material
+        if not (scene_props.src_material
+                and scene_props.dst_material
+                and get_fs25_data_path()):
+            return False
+
+        return scene_props.dst_material.node_tree.nodes.get(
+            'FS25_VehicleShader') and scene_props.src_material.node_tree.nodes.get('FS25_VehicleShader')
+
+    def execute(self, context):
+        scene_props = context.scene.i3d_material
+        src_material = scene_props.src_material
+        dst_material = scene_props.dst_material
+
+        if src_material == dst_material:
+            self.report({'ERROR'}, "Source and destination materials cannot be the same.")
+            return {'CANCELLED'}
+
+        for key, val in src_material.i3d_attributes.shader_material_params.items():
+            dst_material.i3d_attributes.shader_material_params[key] = val
+
+        for idx, param in enumerate(src_material.i3d_attributes.shader_material_textures):
+            dst_material.i3d_attributes.shader_material_textures[idx].source = param.source
+
+        bpy.ops.i3d_material_visualizer.get_set(
+            'INVOKE_DEFAULT',
+            mode='GET',
+            material=dst_material.name,
+            skip_color_scale=self.skip_color_scale,
+            only_color_scale=self.only_color_scale
+        )
+
+        self.report({'INFO'}, "Material attributes copied successfully.")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        self.skip_color_scale = event.shift and not event.ctrl  # If shift is pressed, skip colorScale
+        self.only_color_scale = event.ctrl and not event.shift  # If ctrl is pressed, only colorScale
+        self.execute(context)
+        return {'FINISHED'}
+
+
+class I3DMaterial_OT_VisualizeAll(Operator):
+    bl_idname = "i3d_material_visualizer.visualize_all"
+    bl_label = "Visualize All Materials"
+    bl_description = "Visualize all materials in the scene using I3D Material Visualizer"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    enable: BoolProperty(
+        name="Enable Visualization",
+        description="Enable or disable visualization of all materials",
+        default=True,
+        options={'HIDDEN'}
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return get_fs25_data_path()
+
+    def execute(self, context):
+        for material in bpy.data.materials:
+            if material.i3d_attributes.shader_name != 'vehicleShader':
+                continue
+            material.i3d_visualized = self.enable
+        return {'FINISHED'}
+
+
+class I3DMaterial_OT_WarningPopup(Operator):
     bl_idname = "i3d_material_visualizer.warning_popup"
     bl_label = "Warning"
     bl_options = {'INTERNAL'}
@@ -184,6 +302,9 @@ classes = (
     I3DMaterial_SceneProperties,
     I3DMaterial_OperatorGetSet,
     I3DMaterial_AddonPreferences,
+    I3DMaterial_PT_Panel,
+    I3DMaterial_OT_CopyAttributes,
+    I3DMaterial_OT_VisualizeAll,
     I3DMaterial_OT_WarningPopup,
 )
 
