@@ -2,219 +2,164 @@ import logging
 import bpy
 from pathlib import Path
 
-ATTR_MAP = dict[str, tuple[str, str]](
-    colorScale=('colorScale', 'Color'),
-    smoothnessScale=('smoothnessScale', 'Smoothness Scale'),
-    metalnessScale=('metalnessScale', 'Metalness Scale'),
-    clearCoatIntensity=('clearCoatIntensity', 'Clear Coat Intensity'),
-    clearCoatSmoothness=('clearCoatSmoothness', 'Clear Coat Smoothness'),
-    porosity=('porosity', 'Porosity'),
-)
 
-NODE_SETTINGS = {
+ROLE_PROP = "i3d_role"
+I3DIO_ADDON_ID = "i3dio"
+
+
+ATTR_MAP: dict[str, tuple[str, str]] = {
+    'colorScale': ('colorScale', 'Color'),
+    'smoothnessScale': ('smoothnessScale', 'Smoothness Scale'),
+    'metalnessScale': ('metalnessScale', 'Metalness Scale'),
+    'clearCoatIntensity': ('clearCoatIntensity', 'Clear Coat Intensity'),
+    'clearCoatSmoothness': ('clearCoatSmoothness', 'Clear Coat Smoothness'),
+    'porosity': ('porosity', 'Porosity'),
+}
+
+NODE_SETTINGS: dict[str, dict[str, str | tuple[int, int]]] = {
     'Principled BSDF': {
-        'location': (200, 440),
-        'type': 'ShaderNodeBsdfPrincipled',
+        'location': (180, 420),
+        'bl_idname': 'ShaderNodeBsdfPrincipled',
         'from_node': ('Normal.Normal Map.Normal', 'Base Color.Diffuse.Color',),
+        'hide_unused': True,
     },
     'Material Output': {
-        'location': (700, 260),
-        'type': 'ShaderNodeOutputMaterial',
+        'location': (480, 300),
+        'bl_idname': 'ShaderNodeOutputMaterial',
         'from_node': ('Surface.FS25_VehicleShader.BSDF',),
     },
     'FS25_VehicleShader': {
-        'location': (280, 240),
-        'type': 'ShaderNodeGroup',
+        'location': (180, 240),
+        'bl_idname': 'ShaderNodeGroup',
         'group': 'FS25_VehicleShader',
-        'to_node': ('BSDF.Material Output.Surface', 'Resolution.point0'),
-        'from_node': (  # 'Diffuse.Diffuse.Color',
-            # 'Specular.Specular.Color',
-            # 'Normal.Normal.Color',
-            # 'Alpha.Diffuse.Color',
+        'to_node': ('BSDF.Material Output.Surface',),
+        'from_node': (
             'Detail Diffuse.Detail Diffuse.Color',
             'Detail Specular.Detail Specular.Color',
-            'Detail Normal.Detail Normal.Color'
-            'uv0.uv0_diff.Vector',
-            'uv1.uv1_spec.Vector',
-            'uv2.uv2_norm.Vector',),
-    },
-    'Normal Map': {
-        'location': (-20, 340),
-        'type': 'ShaderNodeNormalMap',
-        'to_node': ('Normal.Principled BSDF.Normal',),
-        'from_node': ('Color.Normal.Color',),
+            'Detail Normal.Detail Normal.Color',
+            'Vector.detail_mapping.Generated UV',
+            'uv0.uv_diff.UV',
+            'uv1.uv_spec.UV',
+            'uv2.uv_norm.UV',
+        ),
+        'hide_unused': True,
     },
     'Glossmap': {
-        'location': (-20, 380),
-        'type': 'ShaderNodeSeparateColor',
+        'location': (-60, 360),
+        'bl_idname': 'ShaderNodeSeparateColor',
         'from_node': ('Color.Specular.Color',),
-    },
-    'Basemap': {
-        'location': (-20, 300),
-        'type': 'ShaderNodeCombineXYZ',
-        'from_node': ('X.Diffuse.Color', 'Y.Specular.Color', 'Z.Normal.Color'),
-    },
-    'Detailmap': {
-        'location': (-20, 0),
-        'type': 'ShaderNodeCombineXYZ',
-        'from_node': ('X.Detail Diffuse.Color', 'Y.Detail Specular.Color', 'Z.Detail Normal.Color'),
+        'collapsed': True,
     },
     'Diffuse': {
-        'location': (-600, 400),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Basemap.X', 'Color.Principled BSDF.Base Color', 'Color.FS25_VehicleShader.Diffuse'),
-        'from_node': ('Vector.uv0_diff.UV',),
+        'location': (-500, 380),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': (
+            'Color.Principled BSDF.Base Color', 'Color.FS25_VehicleShader.Diffuse', 'Alpha.FS25_VehicleShader.Alpha',
+        ),
+        'from_node': ('Vector.uv_diff.UV',),
+        'colorspace': 'Color',
+        'default_image': '$data/shared/white_diffuse.dds',
     },
     'Specular': {
-        'location': (-600, 340),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Basemap.Y', 'Color.Glossmap.Color', 'Color.FS25_VehicleShader.Specular',),
-        'from_node': ('Vector.uv1_spec.UV',),
+        'location': (-500, 340),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': ('Color.Glossmap.Color', 'Color.FS25_VehicleShader.Specular',),
+        'from_node': ('Vector.uv_spec.UV',),
+        'colorspace': 'Non-Color',
+        'default_image': '$data/shared/default_vmask.dds',
+    },
+    'Normal Map': {
+        'location': (-60, 320),
+        'bl_idname': 'ShaderNodeNormalMap',
+        'to_node': ('Normal.Principled BSDF.Normal',),
+        'from_node': ('Color.Normal.Color',),
+        'collapsed': True,
     },
     'Normal': {
-        'location': (-600, 280),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Basemap.Z', 'Color.Normal Map.Color', 'Color.FS25_VehicleShader.Normal'),
-        'from_node': ('Vector.uv2_norm.UV',),
+        'location': (-500, 300),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': ('Color.Normal Map.Color', 'Color.FS25_VehicleShader.Normal'),
+        'from_node': ('Vector.uv_norm.UV',),
+        'colorspace': 'Non-Color',
+        'default_image': '$data/shared/default_normal.dds',
     },
     'Lights Intensity': {
-        'location': (-600, 120),
-        'type': 'ShaderNodeTexImage',
+        'location': (-500, 140),
+        'bl_idname': 'ShaderNodeTexImage',
         'to_node': ('Color.FS25_VehicleShader.Lights Intensity',),
-        'from_node': ('Vector.uv1_spec.UV',),
+        'from_node': ('Vector.uv_spec.UV',),
+        'image_key': 'lightsIntensity',  # optional slot
+        'colorspace': 'Color',
+        'optional': True,  # don’t warn if missing
+        'collapsed': True,
+        'hide_unused': True,
     },
-    'uv0_diff': {
-        'location': (-800, 420),
-        'type': 'ShaderNodeUVMap',
+
+    # Keep separate uv nodes per "base" texture, since specular and normal maps technically can use different UVs
+    'uv_diff': {
+        'location': (-700, 380),
+        'bl_idname': 'ShaderNodeUVMap',
         'to_node': ('UV.Diffuse.Vector',),
-        'preferred_uv': 0,
+        'collapsed': True,
     },
-    'uv1_spec': {
-        'location': (-800, 360),
-        'type': 'ShaderNodeUVMap',
+    'uv_spec': {
+        'location': (-700, 340),
+        'bl_idname': 'ShaderNodeUVMap',
         'to_node': ('UV.Specular.Vector', 'UV.Lights Intensity.Vector',),
-        'preferred_uv': 1,
+        'collapsed': True,
     },
-    'uv2_norm': {
-        'location': (-800, 300),
-        'type': 'ShaderNodeUVMap',
+    'uv_norm': {
+        'location': (-700, 300),
+        'bl_idname': 'ShaderNodeUVMap',
         'to_node': ('UV.Normal.Vector',),
-        'preferred_uv': 2,
+        'collapsed': True,
+    },
+    'texcoord': {
+        'location': (-860, -60),
+        'bl_idname': 'ShaderNodeTexCoord',
+        'hide_unused': True,
+    },
+    'detail_mapping': {
+        'location': (-700, -60),
+        'bl_idname': 'ShaderNodeMapping',
+        'from_node': ('Vector.texcoord.Object',),
+        'to_node': ('Vector.FS25_VehicleShader.Generated UV',),
+        'inputs': {'Scale': (3.0, 3.0, 3.0)},  # Set tiling to match GE vehicle shader
     },
     'Detail Diffuse': {
-        'location': (-600, 60),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Detailmap.X', 'Color.FS25_VehicleShader.Detail Diffuse'),
-        'from_node': ('Vector.map_diff.Vector',),
+        'location': (-500, 80),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': ('Color.FS25_VehicleShader.Detail Diffuse',),
+        'from_node': ('Vector.detail_mapping.Vector',),
+        'props': {'projection': 'BOX'},  # triplanar
+        'image_key': 'detailDiffuse',
+        'colorspace': 'Color',
+        'collapsed': True,
+        'hide_unused': True,
     },
     'Detail Specular': {
-        'location': (-600, 20),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Detailmap.Y', 'Color.FS25_VehicleShader.Detail Specular'),
-        'from_node': ('Vector.map_spec.Vector',),
+        'location': (-500, 40),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': ('Color.FS25_VehicleShader.Detail Specular',),
+        'from_node': ('Vector.detail_mapping.Vector',),
+        'props': {'projection': 'BOX'},  # triplanar
+        'image_key': 'detailSpecular',
+        'colorspace': 'Non-Color',
+        'collapsed': True,
+        'hide_unused': True,
     },
     'Detail Normal': {
-        'location': (-600, -20),
-        'type': 'ShaderNodeTexImage',
-        'to_node': ('Color.Detailmap.Z', 'Color.FS25_VehicleShader.Detail Normal'),
-        'from_node': ('Vector.map_norm.Vector',),
-    },
-    'map_diff': {
-        'location': (-820, 120),
-        'type': 'ShaderNodeMapping',
-        'to_node': ('Vector.Detail Diffuse.Vector',),
-        'from_node': ('Vector.uv0_detailDiff.UV',),
-    },
-    'map_spec': {
-        'location': (-820, 60),
-        'type': 'ShaderNodeMapping',
-        'to_node': ('Vector.Detail Specular.Vector',),
-        'from_node': ('Vector.uv1_detailSpec.UV',),
-    },
-    'map_norm': {
-        'location': (-820, 0),
-        'type': 'ShaderNodeMapping',
-        'to_node': ('Vector.Detail Normal.Vector',),
-        'from_node': ('Vector.uv2_detailNorm.UV',),
-    },
-    'uv0_detailDiff': {
-        'location': (-1020, 140),
-        'type': 'ShaderNodeUVMap',
-        'to_node': ('UV.map_diff.Vector', 'UV.FS25_VehicleShader.uv0'),
-        'preferred_uv': 0,
-    },
-    'uv1_detailSpec': {
-        'location': (-1020, 80),
-        'type': 'ShaderNodeUVMap',
-        'to_node': ('UV.map_spec.Vector', 'UV.FS25_VehicleShader.uv1'),
-        'preferred_uv': 1,
-    },
-    'uv2_detailNorm': {
-        'location': (-1020, 20),
-        'type': 'ShaderNodeUVMap',
-        'to_node': ('UV.map_norm.Vector', 'UV.FS25_VehicleShader.uv2'),
-        'preferred_uv': 2,
-    },
-    'point0': {
-        'location': (460, 180),
-        'type': 'NodeReroute',
-        'from_node': ('Resolution.FS25_VehicleShader',),
-        'to_node': ('point1',),
-    },
-    'point1': {
-        'location': (460, -100),
-        'type': 'NodeReroute',
-        'from_node': ('point0',),
-        'to_node': ('point2',),
-    },
-    'point2': {
-        'location': (-1100, -100),
-        'type': 'NodeReroute',
-        'from_node': ('point1',),
-        'to_node': ('point3',),
-    },
-    'point3': {
-        'location': (-1100, -20),
-        'type': 'NodeReroute',
-        'from_node': ('point2',),
-        'to_node': ('point4', 'Scale.map_norm'),
-    },
-    'point4': {
-        'location': (-1100, 40),
-        'type': 'NodeReroute',
-        'from_node': ('point3',),
-        'to_node': ('point5', 'Scale.map_spec'),
-    },
-    'point5': {
-        'location': (-1100, 100),
-        'type': 'NodeReroute',
-        'from_node': ('point4',),
-        'to_node': ('point6', 'Scale.map_diff'),
-    },
+        'location': (-500, 0),
+        'bl_idname': 'ShaderNodeTexImage',
+        'to_node': ('Color.FS25_VehicleShader.Detail Normal',),
+        'from_node': ('Vector.detail_mapping.Vector',),
+        'props': {'projection': 'BOX'},  # triplanar
+        'image_key': 'detailNormal',
+        'colorspace': 'Non-Color',
+        'collapsed': True,
+        'hide_unused': True,
+    }
 }
-
-REMOVABLE_NODES = ['FS25_VehicleShader',
-                   'Detailmap',
-                   'Detail Diffuse',
-                   'Detail Normal',
-                   'Detail Specular',
-                   'Lights Intensity',
-                   'Basemap',
-                   'map_diff',
-                   'map_spec',
-                   'map_norm',
-                   'uv0_detailDiff',
-                   'uv2_detailNorm',
-                   'uv1_detailSpec',
-                   'uv0_diff',
-                   'uv1_spec',
-                   'uv2_norm',
-                   'point5',
-                   'point4',
-                   'point3',
-                   'point2',
-                   'point1',
-                   'point0']
 
 MASKS = {
     'Scratches': 'show_scratches',
@@ -225,52 +170,49 @@ MASKS = {
 }
 
 
-def get_mat_and_shader(material=None):
-    if material is None:
-        i3d_params = bpy.context.object.active_material.i3d_attributes.shader_material_params
-        vehicle_shader = bpy.context.object.active_material.node_tree.nodes.get('FS25_VehicleShader')
-    else:
-        i3d_params = material.i3d_attributes.shader_material_params
-        vehicle_shader = material.node_tree.nodes.get('FS25_VehicleShader')
-
-    return i3d_params, vehicle_shader
+def get_mat_and_shader(material: bpy.types.Material) -> tuple[dict, bpy.types.Node | None]:
+    return material.i3d_attributes.shader_material_params, material.node_tree.nodes.get('FS25_VehicleShader')
 
 
-def set_param(param: str, material=None):
-    i3d_params, vehicle_shader = get_mat_and_shader(material)
+def set_param(param: str, material: bpy.types.Material) -> None:
+    i3d_params, vehicle_shader_node = get_mat_and_shader(material)
 
-    if vehicle_shader is None:
-        print("FS25_VehicleShader node not found in the material.")
-        return None
-    param = ATTR_MAP.get(param, None)
-    if param[0] in i3d_params:
-        if param[0] == 'colorScale':
-            i3d_params[param[0]] = vehicle_shader.inputs[param[1]].default_value[0:3]
+    if vehicle_shader_node is None:
+        log_warning("FS25_VehicleShader node not found in the material.")
+        return
+    if (param_info := ATTR_MAP.get(param)) is None:
+        return
+    key, socket_name = param_info
+    if key in i3d_params:
+        if key == 'colorScale':
+            i3d_params[key] = vehicle_shader_node.inputs[socket_name].default_value[0:3]
         else:
-            i3d_params[param[0]][0] = vehicle_shader.inputs[param[1]].default_value
+            i3d_params[key][0] = vehicle_shader_node.inputs[socket_name].default_value
 
 
-def get_param(param: str, material=None):
-    i3d_params, vehicle_shader = get_mat_and_shader(material)
+def get_param(param: str, material: bpy.types.Material) -> None:
+    i3d_params, vehicle_shader_node = get_mat_and_shader(material)
 
-    if vehicle_shader is None:
-        print("FS25_VehicleShader node not found in the material.")
+    if vehicle_shader_node is None:
+        log_warning("FS25_VehicleShader node not found in the material.")
         return None
 
-    param = ATTR_MAP.get(param, None)
-    if param[0] in i3d_params:
-        if param[0] == 'colorScale':
-            vehicle_shader.inputs[param[1]].default_value = i3d_params[param[0]][0:3] + (1.0,)
+    if (param_info := ATTR_MAP.get(param)) is None:
+        return
+    key, socket_name = param_info
+
+    if key in i3d_params:
+        if key == 'colorScale':
+            vehicle_shader_node.inputs[socket_name].default_value = i3d_params[key][0:3] + (1.0,)
         else:
-            vehicle_shader.inputs[param[1]].default_value = i3d_params[param[0]][0]
+            vehicle_shader_node.inputs[socket_name].default_value = i3d_params[key][0]
     return None
 
 
-def get_set_params(skip_color_scale=False, only_color_scale=False, mode='GET', material=None):
-    if material is None:
-        material = bpy.context.object.active_material
+def get_set_params(material: bpy.types.Material, skip_color_scale: bool = False, only_color_scale: bool = False,
+                   mode: str = 'GET') -> None:
     if mode not in {'GET', 'SET'}:
-        print(f"Invalid mode: {mode}. Use 'GET' or 'SET'.")
+        log_warning(f"Invalid mode: {mode}. Use 'GET' or 'SET'.")
         return
     if not skip_color_scale:
         get_param('colorScale', material) if mode == 'GET' else set_param('colorScale', material)
@@ -295,21 +237,26 @@ def import_shader(name='FS25_VehicleShader'):
     )
 
 
-def get_fs25_data_path():
-    preferences = bpy.context.preferences
-    addon_prefs = preferences.addons[__package__].preferences
-    if addon_prefs is None:
+def check_i3dio_enabled() -> bool:
+    return 'i3dio' in bpy.context.preferences.addons
+
+
+def get_fs_data_path_from_i3dio() -> str | None:
+    """Get the FS data path from the I3DIO addon."""
+    addon = bpy.context.preferences.addons.get(I3DIO_ADDON_ID)
+    if not addon:
         return None
-    return None if addon_prefs.fs25_data_path == '' else addon_prefs.fs25_data_path
+    return addon.preferences.fs_data_path or None
 
 
-def get_file_from_data(file_path):
-    if str(file_path).startswith('$data'):
-        return Path(get_fs25_data_path()) / Path(file_path[6:])
-    return Path(file_path)
+def get_file_from_data(file_path: str | Path) -> Path:
+    s = str(file_path)
+    if s.startswith('$data'):
+        return Path(get_fs_data_path_from_i3dio()) / s[6:]
+    return Path(s)
 
 
-def load_custom_image(image_path):
+def load_custom_image(image_path: str) -> bpy.types.Image | None:
     if image_path == '':
         return None
     image = bpy.data.images.get(str(Path(image_path).name))
@@ -323,25 +270,24 @@ def load_custom_image(image_path):
     return image
 
 
-def set_image(image, image_node, color_space='Color'):
+def set_image(image: bpy.types.Image | None, image_node, color_space='Color'):
     try:
         image_node.image = image
 
-        if color_space == 'Non-Color':
+        if color_space == 'Non-Color' and image_node.image:
             image_node.image.colorspace_settings.name = 'Non-Color'
 
     except RuntimeError:
-        pass
-        print(f"Could not load image {image.name} from {image.filepath}")
+        log_warning(f"Could not load image for node {getattr(image_node, 'name', '?')}")
 
 
-def update_detail_map(mat, mode='GET'):
+def update_detail_map(mat: bpy.types.Material, mode='GET'):
     if mode not in {'GET', 'SET'}:
-        print(f"Invalid mode: {mode}. Use 'GET' or 'SET'.")
+        log_warning(f"Invalid mode: {mode}. Use 'GET' or 'SET'.")
         return
     textures = mat.i3d_attributes.shader_material_textures
     if textures is None or len(textures) < 3:
-        print("No detail textures found in material attributes.")
+        log_warning("No detail textures found in material attributes.")
         return
 
     if diffuse := mat.node_tree.nodes.get('Detail Diffuse'):
@@ -372,7 +318,7 @@ def update_detail_map(mat, mode='GET'):
             mat.i3d_attributes.shader_material_textures[0].source = specular.image.filepath if specular.image else ''
 
     if intensity := mat.node_tree.nodes.get('Lights Intensity'):
-        print("Updating Lights Intensity texture")
+        log_warning("Updating Lights Intensity texture")
         if len(textures) >= 8:
             if textures[7].name == 'lightsIntensity':
                 if mode == 'GET':
@@ -383,277 +329,365 @@ def update_detail_map(mat, mode='GET'):
                         if intensity.image else ''
 
 
-def link_node(node, path_, mat, from_node=True):
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    is_point = 'point' in node.name
-    path_ = path_.split('.')
-
-    if is_point:
-        if len(path_) == 2:
-            src = path_[0]
-            src_node = nodes.get(path_[1])
-            if src_node is None:
-                return
-            if from_node:
-                src_socket = src_node.outputs.get(src)
-                dst_socket = node.inputs[0]
-            else:
-                src_socket = node.outputs[0]
-                dst_socket = src_node.inputs.get(src)
-            links.new(src_socket, dst_socket)
-        elif len(path_) == 1:
-            src = nodes.get(path_[0])
-            if src is None:
-                return
-            if from_node:
-                src_socket = src.inputs[0]
-                dst_socket = node.outputs[0]
-            else:
-                src_socket = node.outputs[0]
-                dst_socket = src.inputs[0]
-
-            links.new(src_socket, dst_socket)
-        else:
-            print(f'Invalid point path {path_}')
-            return
+def _apply_props(node: bpy.types.Node, props: dict | None):
+    if not props:
         return
+    for attr, val in props.items():
+        try:
+            setattr(node, attr, val)
+        except Exception:
+            log_warning(f"Could not set prop {attr} on {node.name}")
 
-    dst_node = nodes.get(path_[1])
-    if dst_node is None:
+
+def _apply_inputs(node: bpy.types.Node, inputs: dict | None):
+    if not inputs:
         return
-
-    src = path_[0]
-    dst = path_[2]
-
-    # from = my socket - node - from socket -> inputs to me
-    # to = my socket - node - from socket -> outputs from me
-
-    if from_node:
-        src_socket = dst_node.outputs.get(dst)
-        dst_socket = node.inputs.get(src)
-    else:
-        src_socket = node.outputs.get(src)
-        dst_socket = dst_node.inputs.get(dst)
-
-    if src_socket is None or dst_socket is None:
-        print(
-            f'Invalid path {path_} node: {node.name} dst_node: {dst_node.name}\n src_socket: {src_socket} dst_socket: {dst_socket}')
-        return
-
-    links.new(src_socket, dst_socket)
+    for socket_name, val in inputs.items():
+        socket = node.inputs.get(socket_name)
+        if socket is None:
+            continue
+        try:
+            socket.default_value = val
+        except Exception:
+            try:
+                default_val = socket.default_value
+                if isinstance(default_val, (tuple, list)) and isinstance(val, (tuple, list)):
+                    for i in range(min(len(default_val), len(val))):
+                        default_val[i] = val[i]
+            except Exception:
+                log_warning(f"Could not set input '{socket_name}' on {node.name}")
 
 
-def set_node_and_links(mat, name, node=None, skip_link=False):
-    node_params = NODE_SETTINGS.get(name)
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    if node_params is None:
+def set_role(node: bpy.types.Node, role: str) -> None:
+    try:
+        node[ROLE_PROP] = role
+    except Exception:
+        pass
+
+
+def find_by_role(mat: bpy.types.Material, role: str) -> bpy.types.Node | None:
+    # Prefer exact match on our role prop; fallback to name (for older materials)
+    for n in mat.node_tree.nodes:
+        if n.get(ROLE_PROP) == role:
+            return n
+    return mat.node_tree.nodes.get(role)
+
+
+def set_node_and_links(mat: bpy.types.Material, role: str,
+                       node: bpy.types.Node | None = None) -> bpy.types.Node | None:
+    params = NODE_SETTINGS.get(role)
+    if params is None:
         return None
 
+    nodes = mat.node_tree.nodes
+    created = False
     if node is None:
-        node = nodes.get(name)
+        node = nodes.get(role)
         if node is None:
-            node = nodes.new(node_params['type'])
+            node = nodes.new(params['bl_idname'])
+            created = True
 
-    location = node_params['location']
-    node.location = location
-    node.name = name
-    node.label = name
+    node.location = params['location']
 
-    # clear_node_links(node, links)
-    from_node = node_params.get('from_node')
-    if from_node is not None:
-        for path_ in from_node:
-            if skip_link and 'FS25_VehicleShader' in path_:
-                continue
-            link_node(node, path_, mat)
+    # Only rename if created (keep user/adopted names intact)
+    if created:
+        node.name = role
+        node.label = role
+        try:
+            node["i3d_auto_created"] = True
+        except Exception:
+            pass
 
-    to_node = node_params.get('to_node')
-    if to_node is not None:
-        for path_ in to_node:
-            if skip_link and 'FS25_VehicleShader' in path_:
-                continue
-            link_node(node, path_, mat, from_node=False)
+    set_role(node, role)
 
-    uv = node_params.get('preferred_uv')
-    if uv is not None:
-        obj = bpy.context.object
-        if uv < len(obj.data.uv_layers):
-            node.uv_map = obj.data.uv_layers[uv].name
-        else:
-            node.uv_map = obj.data.uv_layers[0].name
+    # Handle NodeGroup 'group' by name
+    group_name = params.get('group')
+    if group_name and hasattr(node, "node_tree"):
+        if nt := bpy.data.node_groups.get(group_name):
+            node.node_tree = nt
 
+    _apply_props(node, params.get('props'))
+    _apply_inputs(node, params.get('inputs'))
     return node
 
 
-def visualize_material(mat):
-    if get_fs25_data_path() is None:
-        print("FS25 Data Path is not set. Please set it in the addon preferences.")
+def _refs_for(name: str) -> set[str]:
+    refs = set()
+    params = NODE_SETTINGS.get(name, {})
+    for key in ('from_node', 'to_node'):
+        for p in params.get(key, ()) or ():
+            parts = p.split('.')
+            if len(parts) == 3:
+                refs.add(parts[1])  # Middle node name (other_name)
+    return refs
+
+
+def _closure_for(seeds: set[str]) -> list[str]:
+    seen = set()
+    stack = list(seeds)
+    order = []
+    while stack:
+        name = stack.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        order.append(name)
+        for ref in _refs_for(name):
+            if ref not in seen:
+                stack.append(ref)
+    return order
+
+
+def _resolve_source(tex) -> str:
+    return tex.source if getattr(tex, 'source', '') else getattr(tex, 'default_source', '')
+
+
+def _assign_image_for_role(mat: bpy.types.Material, node: bpy.types.Node, image_key: str | None,
+                           default_image: str | None, colorspace: str = 'Color', optional: bool = False) -> None:
+    if node.bl_idname != 'ShaderNodeTexImage':
         return
-    white_diffuse = '$data/shared/white_diffuse.dds'
-    if 'white_diffuse.dds' not in bpy.data.images:
-        load_custom_image(white_diffuse)
-    white_image = bpy.data.images.get('white_diffuse.dds')
+
+    # 1) Try explicit material texture slot via image_key
+    if image_key:
+        textures = getattr(mat.i3d_attributes, 'shader_material_textures', None)
+        if textures and image_key in textures:
+            path = _resolve_source(textures[image_key])
+            if path:
+                img = load_custom_image(path)
+                set_image(img, node, colorspace)
+                return
+        elif image_key and not optional:
+            log_warning(f"Texture key '{image_key}' not found for node '{getattr(node, 'name', '?')}'")
+
+    # 2) Fallback to default_image if node has no image
+    if not getattr(node, 'image', None) and default_image:
+        img = load_custom_image(default_image)
+        set_image(img, node, colorspace)
+
+
+def assign_images_from_dict(mat: bpy.types.Material, nodes_by_role: dict[str, bpy.types.Node]) -> None:
+    for role, params in NODE_SETTINGS.items():
+        node = nodes_by_role.get(role) or find_by_role(mat, role)
+        if not node:
+            continue
+        image_key = params.get('image_key')
+        default_image = params.get('default_image')
+        colorspace = params.get('colorspace', 'Color')
+        optional = bool(params.get('optional', False))
+        _assign_image_for_role(mat, node, image_key, default_image, colorspace, optional)
+
+
+def apply_presentation_from_dict(mat: bpy.types.Material):
+    """Apply presentation settings like collapsed and hide_unused from NODE_SETTINGS."""
+    for role, params in NODE_SETTINGS.items():
+        node = find_by_role(mat, role)
+        if not node:
+            continue
+        if params.get('collapsed'):
+            node.hide = True
+        if params.get('hide_unused'):
+            for sock in (*getattr(node, "inputs", []), *getattr(node, "outputs", [])):
+                try:
+                    sock.hide = not sock.is_linked
+                except Exception:
+                    pass
+
+
+def adopt_existing_nodes(mat: bpy.types.Material) -> dict[str, bpy.types.Node]:
+    """
+    Detect common user setups and relabel their nodes to our canonical names
+    so the builder reuses them instead of creating new ones.
+    Returns a dict of adopted names -> node.
+    """
+    nodes = mat.node_tree.nodes
+    adopted: dict[str, bpy.types.Node] = {}
+
+    # Find Principled BSDF node (prefer the one connected to Material output if multiple)
+    principled = next((n for n in nodes if n.bl_idname == "ShaderNodeBsdfPrincipled"), None)
+    if not principled:
+        return adopted
+
+    # Diffuse (Image -> Base Color)
+    if (base := principled.inputs.get('Base Color')) and base.is_linked:
+        src = base.links[0].from_node
+        if src.bl_idname == 'ShaderNodeTexImage':
+            set_role(src, 'Diffuse')
+            adopted['Diffuse'] = src
+
+    # Normal (Normal Map/Image -> Principled.Normal)
+    if (nrm_in := principled.inputs.get('Normal')) and nrm_in.is_linked:
+        src = nrm_in.links[0].from_node
+        if src.bl_idname == 'ShaderNodeTexImage':
+            set_role(src, 'Normal')
+            adopted['Normal'] = src
+        elif src.bl_idname == 'ShaderNodeNormalMap':
+            set_role(src, 'Normal Map')
+            adopted['Normal Map'] = src
+            if (nrm_map := src.inputs.get('Color')) and nrm_map.is_linked:
+                tex = nrm_map.links[0].from_node
+                if tex and tex.bl_idname == 'ShaderNodeTexImage':
+                    set_role(tex, 'Normal')
+                    adopted['Normal'] = tex
+
+    if (gloss := nodes.get('Glossmap')):
+        if gloss.bl_idname == 'ShaderNodeTexImage':
+            # Case 1: Image Texture named "Glossmap"
+            # Treat it as the Specular image node but keep the original name (to not break user setups)
+            set_role(gloss, 'Specular')
+            adopted['Specular'] = gloss
+        elif gloss.bl_idname == 'ShaderNodeSeparateColor':
+            # Case 2: Separate RGB node named "Glossmap"
+            adopted['Glossmap'] = gloss
+            if (gloss_map := gloss.inputs.get('Color')) and gloss_map.is_linked:
+                tex = gloss_map.links[0].from_node
+                if tex and tex.bl_idname == 'ShaderNodeTexImage':
+                    set_role(tex, 'Specular')
+                    adopted['Specular'] = tex  # Keep original name
+    else:
+        # Case 3: Principled Specular IOR Level fed by Image/SeparateColor
+        if (ior := principled.inputs.get('Specular IOR Level')) and ior.is_linked:
+            src = ior.links[0].from_node
+            if src.bl_idname == 'ShaderNodeSeparateColor' and 'Glossmap' not in adopted:
+                set_role(src, 'Glossmap')
+                adopted['Glossmap'] = src
+                if (col := src.inputs.get('Color')) and col.is_linked:
+                    tex = col.links[0].from_node
+                    if tex and tex.bl_idname == 'ShaderNodeTexImage':
+                        set_role(tex, 'Specular')
+                        adopted['Specular'] = tex  # Keep original name
+            elif src.bl_idname == 'ShaderNodeTexImage' and 'Specular' not in adopted:
+                set_role(src, 'Specular')
+                adopted['Specular'] = src
+
+    return adopted
+
+
+def build_nodes_by_role(mat: bpy.types.Material, adopted: dict[str, bpy.types.Node]) -> dict[str, bpy.types.Node]:
+    by_role: dict[str, bpy.types.Node] = {}
+    for role in NODE_SETTINGS.keys():
+        by_role[role] = adopted.get(role) or find_by_role(mat, role)
+    return by_role
+
+
+def link_between_roles(mat: bpy.types.Material,
+                       nodes_by_role: dict[str, bpy.types.Node],
+                       node_role: str, path_: str, from_node=True) -> None:
+    parts = path_.split('.')
+    if len(parts) != 3:
+        log_warning(f"Invalid link path {path_!r} for role {node_role!r} (expected 'A.B.C').")
+        return
+    a, other_role, c = parts
+
+    node = nodes_by_role.get(node_role) or find_by_role(mat, node_role)
+    other = nodes_by_role.get(other_role) or find_by_role(mat, other_role)
+    if not node or not other:
+        return
+
+    dst = node.inputs.get(a) if from_node else other.inputs.get(c)
+    src = other.outputs.get(c) if from_node else node.outputs.get(a)
+    if not src or not dst:
+        return
+    try:
+        mat.node_tree.links.new(src, dst)
+    except Exception:
+        # if input had an existing link, replace it
+        try:
+            for link in list(dst.links):
+                mat.node_tree.links.remove(link)
+            mat.node_tree.links.new(src, dst)
+        except Exception:
+            pass
+
+
+def link_all_from_dict(mat: bpy.types.Material, nodes_by_role: dict[str, bpy.types.Node]) -> None:
+    for role, params in NODE_SETTINGS.items():
+        if not nodes_by_role.get(role):
+            continue
+        for p in params.get('from_node', ()) or ():
+            link_between_roles(mat, nodes_by_role, role, p, from_node=True)
+        for p in params.get('to_node', ()) or ():
+            link_between_roles(mat, nodes_by_role, role, p, from_node=False)
+
+
+def apply_locations_from_dict(mat: bpy.types.Material, nodes_by_role: dict[str, bpy.types.Node]) -> None:
+    """
+    Move nodes to the positions defined in NODE_SETTINGS.
+    """
+    for role, params in NODE_SETTINGS.items():
+        node = nodes_by_role.get(role) or find_by_role(mat, role)
+        print(f"Applying location for role {role}: node={node}")
+        if not node:
+            print(f" No node found for role {role}")
+            continue
+        loc = params.get('location')
+        if loc:
+            try:
+                print(f" Setting location of {role} to {loc}")
+                node.location = loc
+            except Exception:
+                pass
+
+
+def visualize_material(mat: bpy.types.Material) -> None:
+    if get_fs_data_path_from_i3dio() is None:
+        log_warning("FS25 Data Path is not set. Please set it in the addon preferences.")
+        return
     if 'FS25_VehicleShader' not in bpy.data.node_groups:
         import_shader()
 
     if 'FS25_VehicleShader' in mat.node_tree.nodes:
         return
+
     mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    resolution = None
 
-    principled_bsdf = set_node_and_links(mat, 'Principled BSDF')
-    set_node_and_links(mat, 'Material Output')
+    # Adopt existing nodes that user may already have added
+    adopted = adopt_existing_nodes(mat)     # now tags roles internally
+    nodes_by_role = build_nodes_by_role(mat, adopted)
 
-    fs25_shader = nodes.new('ShaderNodeGroup')
-    fs25_shader.node_tree = bpy.data.node_groups.get('FS25_VehicleShader')
-    set_node_and_links(mat, 'FS25_VehicleShader', fs25_shader)
+    # Create any missing nodes (tagged with role)
+    for role in _closure_for(set(NODE_SETTINGS.keys())):
+        if not nodes_by_role.get(role):
+            nodes_by_role[role] = set_node_and_links(mat, role, node=None)
 
-    set_node_and_links(mat, 'Basemap')
+    apply_locations_from_dict(mat, nodes_by_role)
 
-    # Diffuse
-    if principled_bsdf.inputs.get('Base Color').links:
-        diffuse = principled_bsdf.inputs['Base Color'].links[0].from_node
-        set_node_and_links(mat, 'Diffuse', diffuse, skip_link=diffuse.image is None)
-    else:
-        diffuse = set_node_and_links(mat, 'Diffuse', skip_link=True)
+    # Link after everything exists
+    link_all_from_dict(mat, nodes_by_role)
 
-    if diffuse.inputs.get('Vector').links:
-        uv = diffuse.inputs['Vector'].links[0].from_node
-        set_node_and_links(mat, 'uv0_diff', uv)
-    else:
-        set_node_and_links(mat, 'uv0_diff')
+    # Assign images (uses nodes_by_role, honors default/image_key/colorspace)
+    assign_images_from_dict(mat, nodes_by_role)
 
-    # Alpha
-    alpha = principled_bsdf.inputs.get('Alpha')
-    if alpha.links:
-        links.new(fs25_shader.inputs['Alpha'], alpha.links[0].from_socket)
-    else:
-        diffuse = nodes.get('Diffuse')
-        if diffuse.image is not None:
-            links.new(fs25_shader.inputs['Alpha'], diffuse.outputs['Alpha'])
-        else:
-            diffuse.image = white_image
-
-    # Emission
-    emission = principled_bsdf.inputs[27]
-    if emission.links:
-        links.new(fs25_shader.inputs['Lights Intensity'], emission.links[0].from_socket)
-        emission.links[0].from_node.location = (-600, 120)
-    else:
-        if len(mat.i3d_attributes.shader_material_textures) >= 8:
-            if mat.i3d_attributes.shader_material_textures[7].name == 'lightsIntensity':
-                lights_intensity = set_node_and_links(mat, 'Lights Intensity')
-                lights_intensity.image = load_custom_image(
-                    mat.i3d_attributes.shader_material_textures[7].source
-                    if mat.i3d_attributes.shader_material_textures[7].source else
-                    mat.i3d_attributes.shader_material_textures[7].default_source)
-                if lights_intensity.inputs.get('Vector').links:
-                    uv = lights_intensity.inputs['Vector'].links[0].from_node
-                    set_node_and_links(mat, 'uv1_spec', uv)
-                else:
-                    set_node_and_links(mat, 'uv1_spec')
-
-    # Specular
-    gloss_map = set_node_and_links(mat, 'Glossmap')
-    if gloss_map.inputs.get('Color').links:
-        specular = gloss_map.inputs['Color'].links[0].from_node
-        set_node_and_links(mat, 'Specular', specular, skip_link=specular.image is None)
-    else:
-        specular = set_node_and_links(mat, 'Specular', skip_link=True)
-
-    if specular.image is not None:
-        specular.image.colorspace_settings.name = 'Non-Color'
-
-    if resolution is None:
-        if specular.image is not None:
-            resolution = specular.image.size[0], specular.image.size[1]
-
-    if specular.inputs.get('Vector').links:
-        uv = specular.inputs['Vector'].links[0].from_node
-        set_node_and_links(mat, 'uv1_spec', uv)
-    else:
-        set_node_and_links(mat, 'uv1_spec')
-
-    # Normal
-    normal_map = set_node_and_links(mat, 'Normal Map')
-    if normal_map.inputs.get('Color').links:
-        normal = normal_map.inputs['Color'].links[0].from_node
-        set_node_and_links(mat, 'Normal', normal, skip_link=normal.image is None)
-    else:
-        normal = set_node_and_links(mat, 'Normal', skip_link=True)
-
-    if normal.image is not None:
-        normal.image.colorspace_settings.name = 'Non-Color'
-
-    if resolution is None:
-        if normal.image is not None:
-            resolution = normal.image.size[0], normal.image.size[1]
-
-    if normal.inputs.get('Vector').links:
-        uv = normal.inputs['Vector'].links[0].from_node
-        set_node_and_links(mat, 'uv2_norm', uv)
-    else:
-        set_node_and_links(mat, 'uv2_norm')
-
-    if resolution:
-        scale = max(max(resolution[0], resolution[1]) / 256.0, 1.0)
-        fs25_shader.inputs['Resolution'].default_value = resolution[0], resolution[1], scale * 2.0
-        fs25_shader.inputs['Droplets Scale'].default_value = 1
-
-    set_node_and_links(mat, 'Detailmap')
-    detail_diffuse = set_node_and_links(mat, 'Detail Diffuse')
-    detail_secular = set_node_and_links(mat, 'Detail Specular')
-    detail_normal = set_node_and_links(mat, 'Detail Normal')
-
-    textures = mat.i3d_attributes.shader_material_textures
-    detail_diffuse.image = load_custom_image(textures[2].source if textures[2].source else textures[2].default_source)
-    detail_secular.image = load_custom_image(textures[0].source if textures[0].source else textures[0].default_source)
-    detail_normal.image = load_custom_image(textures[1].source if textures[1].source else textures[1].default_source)
-    detail_normal.image.colorspace_settings.name = 'Non-Color'
-    detail_secular.image.colorspace_settings.name = 'Non-Color'
-
-    set_node_and_links(mat, 'map_diff')
-    set_node_and_links(mat, 'map_spec')
-    set_node_and_links(mat, 'map_norm')
-    set_node_and_links(mat, 'uv0_detailDiff')
-    set_node_and_links(mat, 'uv1_detailSpec')
-    set_node_and_links(mat, 'uv2_detailNorm')
-
-    set_node_and_links(mat, 'point5')
-    set_node_and_links(mat, 'point4')
-    set_node_and_links(mat, 'point3')
-    set_node_and_links(mat, 'point2')
-    set_node_and_links(mat, 'point1')
-    set_node_and_links(mat, 'point0')
-
-    for node in nodes:
-        node.hide = True
+    apply_presentation_from_dict(mat)
 
 
 def update_visualize_material(self, context):
-    if get_fs25_data_path() is None:
+    if get_fs_data_path_from_i3dio() is None:
         bpy.ops.i3d_material_visualizer.warning_popup('INVOKE_DEFAULT', message="FS25 Data Path is not set. ")
         return
-    mat = self
+    mat: bpy.types.Material = self
     if self.i3d_visualized:
         if 'FS25_VehicleShader' in mat.node_tree.nodes:
             return
         visualize_material(mat)
-        get_set_params(mode='GET', material=mat)
+        get_set_params(mat, mode='GET')
     else:
-        nodes = self.node_tree.nodes
-        links = self.node_tree.links
-        if 'FS25_VehicleShader' in nodes:
-            if 'Principled BSDF' in nodes:
-                links.new(nodes['Principled BSDF'].outputs['BSDF'], nodes['Material Output'].inputs['Surface'])
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
 
-            for node in nodes:
-                if node.name in REMOVABLE_NODES:
-                    nodes.remove(node)
+        bsdf = next((n for n in nodes if n.bl_idname == "ShaderNodeBsdfPrincipled"), None)
+        mount = next((n for n in nodes if n.bl_idname == "ShaderNodeOutputMaterial"
+                      and getattr(n, "is_active_output", False)), None)
+        if 'FS25_VehicleShader' in nodes and bsdf and mount:
+            bsdf_out = bsdf.outputs.get('BSDF')
+            surf_in = mount.inputs.get('Surface')
+            if bsdf_out and surf_in:
+                try:
+                    links.new(bsdf_out, surf_in)
+                except Exception:
+                    pass
+
+            for n in [n for n in nodes if n.get("i3d_auto_created", False)]:
+                nodes.remove(n)
 
 
 def update_mask(arg):
@@ -666,5 +700,5 @@ def update_mask(arg):
     return update_
 
 
-def print(*args):
+def log_warning(*args):
     logging.log(logging.WARNING, " ".join(map(str, args)))

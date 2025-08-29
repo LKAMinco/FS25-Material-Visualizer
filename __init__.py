@@ -1,10 +1,11 @@
 import bpy
-from bpy.props import StringProperty, BoolProperty, PointerProperty
-from bpy.types import (Operator, Panel, AddonPreferences, PropertyGroup,
-                       Scene, Material)
+from bpy.props import BoolProperty, PointerProperty
+from bpy.types import (Operator, Panel, PropertyGroup, Scene, Material)
 
-from .util import update_visualize_material, print, get_param, get_set_params, set_param, update_detail_map, \
-    update_mask, get_fs25_data_path
+from .util import (
+    update_visualize_material, log_warning, get_param, get_set_params, set_param, update_detail_map, update_mask,
+    get_fs_data_path_from_i3dio
+)
 
 bl_info = {
     "name": "I3D Material Visualizer",
@@ -16,23 +17,6 @@ bl_info = {
     "warning": "",
     "category": "3D View",
 }
-
-
-class I3DMaterial_AddonPreferences(AddonPreferences):
-    bl_idname = __package__
-
-    fs25_data_path: StringProperty(
-        name="FS 25 Data Path",
-        default="",
-        subtype='DIR_PATH',
-    )
-
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row(align=True)
-        split = row.split(factor=0.2)
-        split.label(text="FS 25 Data Path")
-        split.prop(self, "fs25_data_path", text="")
 
 
 class I3DMaterial_OperatorGetSet(Operator):
@@ -96,10 +80,9 @@ class I3DMaterial_OperatorGetSet(Operator):
         if self.single_param:
             get_param(self.single_param, material) if self.mode == 'GET' else set_param(self.single_param, material)
         else:
-            get_set_params(skip_color_scale=self.skip_color_scale,
+            get_set_params(material, skip_color_scale=self.skip_color_scale,
                            only_color_scale=self.only_color_scale,
-                           mode=self.mode,
-                           material=material)
+                           mode=self.mode)
             if not self.only_color_scale:
                 update_detail_map(material, mode=self.mode)
 
@@ -205,7 +188,7 @@ class I3DMaterial_OT_CopyAttributes(Operator):
         scene_props = context.scene.i3d_material
         if not (scene_props.src_material
                 and scene_props.dst_material
-                and get_fs25_data_path()):
+                and get_fs_data_path_from_i3dio()):
             return False
 
         return scene_props.dst_material.node_tree.nodes.get(
@@ -259,7 +242,7 @@ class I3DMaterial_OT_VisualizeAll(Operator):
 
     @classmethod
     def poll(cls, context):
-        return get_fs25_data_path()
+        return get_fs_data_path_from_i3dio()
 
     def execute(self, context):
         for material in bpy.data.materials:
@@ -286,7 +269,7 @@ class I3DMaterial_OT_WarningPopup(Operator):
         except Exception:
             self.report({'ERROR'},
                         "Failed to open Addon Preferences. Please check your Blender version and addon installation.")
-            print("Failed to open Addon Preferences for I3D Material Visualizer.")
+            log_warning("Failed to open Addon Preferences for I3D Material Visualizer.")
         return {'FINISHED'}
 
     def draw(self, context):
@@ -301,17 +284,16 @@ class I3DMaterial_OT_WarningPopup(Operator):
 classes = (
     I3DMaterial_SceneProperties,
     I3DMaterial_OperatorGetSet,
-    I3DMaterial_AddonPreferences,
     I3DMaterial_PT_Panel,
     I3DMaterial_OT_CopyAttributes,
     I3DMaterial_OT_VisualizeAll,
     I3DMaterial_OT_WarningPopup,
 )
+_register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    _register()
     Material.i3d_visualized = BoolProperty(
         name="Visualized",
         description="Indicates if the material is being visualized by the I3D Material Visualizer",
@@ -324,5 +306,4 @@ def register():
 def unregister():
     del Material.i3d_visualized
     del Scene.i3d_material
-    for cls in classes:
-        bpy.utils.unregister_class(cls)
+    _unregister()
