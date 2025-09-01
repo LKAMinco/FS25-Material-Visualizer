@@ -252,42 +252,12 @@ class I3DMaterial_OT_VisualizeAll(Operator):
         return {'FINISHED'}
 
 
-class I3DMaterial_OT_WarningPopup(Operator):
-    bl_idname = "i3d_material_visualizer.warning_popup"
-    bl_label = "Warning"
-    bl_options = {'INTERNAL'}
-
-    message: bpy.props.StringProperty()
-
-    def execute(self, context):
-        try:
-            bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
-        except Exception:
-            pass
-        try:
-            bpy.ops.preferences.addon_show(module=__name__.split(".", 1)[0])
-        except Exception:
-            self.report({'ERROR'},
-                        "Failed to open Addon Preferences. Please check your Blender version and addon installation.")
-            log_warning("Failed to open Addon Preferences for I3D Material Visualizer.")
-        return {'FINISHED'}
-
-    def draw(self, context):
-        layout = self.layout
-        layout.label(text=self.message)
-        layout.label(text="Please set the FS 25 Data Path in the Addon Preferences.")
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=400)
-
-
 classes = (
     I3DMaterial_SceneProperties,
     I3DMaterial_OperatorGetSet,
     I3DMaterial_PT_Panel,
     I3DMaterial_OT_CopyAttributes,
     I3DMaterial_OT_VisualizeAll,
-    I3DMaterial_OT_WarningPopup,
 )
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 

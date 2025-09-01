@@ -662,7 +662,6 @@ def visualize_material(mat: bpy.types.Material) -> None:
 
 def update_visualize_material(self, context):
     if get_fs_data_path_from_i3dio() is None:
-        bpy.ops.i3d_material_visualizer.warning_popup('INVOKE_DEFAULT', message="FS25 Data Path is not set. ")
         return
     mat: bpy.types.Material = self
     if self.i3d_visualized:
