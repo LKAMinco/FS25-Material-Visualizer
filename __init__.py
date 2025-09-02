@@ -3,7 +3,7 @@ from bpy.props import BoolProperty, PointerProperty
 from bpy.types import (Operator, Panel, PropertyGroup, Scene, Material)
 
 from .util import (
-    update_visualize_material, log_warning, get_param, get_set_params, set_param, update_detail_map, update_mask,
+    update_visualize_material, get_param, get_set_params, set_param, update_detail_map, update_mask,
     get_fs_data_path_from_i3dio
 )
 
