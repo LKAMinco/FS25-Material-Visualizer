@@ -2,7 +2,7 @@
 
 ### Supports only [Unofficial I3D Exporter](https://github.com/StjerneIdioten/I3D-Blender-Addon/releases)
 
-### !!! For correct work, fs25 data path must be set in Blender preferences.
+### !!! For it to work correctly set Community I3D Exporter fs data path in Blender preferences.
 
 This mod visualizes the vehicle shader in Farming Simulator 25. It allows you to see how the shader is applied to
 vehicles in the game.
