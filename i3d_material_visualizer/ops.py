@@ -125,7 +125,7 @@ class I3DMaterialVisualizer_OT_copy_attributes(bpy.types.Operator):
         ):
             d.source = s.source
 
-        MaterialVisualizer.enable(dst_material, self)
+        MaterialVisualizer.enable(dst_material)
         sync_params(
             dst_material,
             SyncDirection.PROPS_TO_NODES,
