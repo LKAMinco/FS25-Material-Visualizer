@@ -109,7 +109,6 @@ class MaterialVisualizer:
                 if not names_found:
                     return  # Should be covered above, but just in case
 
-                chosen_name = ""
                 if len(names_found) > 1:
                     self.reporter.warn(
                         f"Inconsistent UV map names at index {uv_index} for material "
@@ -123,11 +122,11 @@ class MaterialVisualizer:
                 if chosen_name:
                     node.uv_map = chosen_name
 
-            requirements = self.mat.i3d_attributes.required_vertex_attributes
-            if "uv1" in requirements:
-                assign_uv_map_for_node(1, "uv_spec")
-            if "uv2" in requirements:
-                assign_uv_map_for_node(2, "uv_norm")
+        requirements = self.mat.i3d_attributes.required_vertex_attributes
+        if "uv1" in requirements:
+            assign_uv_map_for_node(1, "uv_spec")
+        if "uv2" in requirements:
+            assign_uv_map_for_node(2, "uv_norm")
 
     def _position_nodes(self):
         occupied_locations = set()
