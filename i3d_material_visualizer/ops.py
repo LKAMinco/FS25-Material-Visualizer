@@ -55,7 +55,7 @@ class I3DMaterialVisualizer_OT_sync_shader(bpy.types.Operator):
             return {"CANCELLED"}
 
         if self.direction == SyncDirection.PROPS_TO_NODES and VEHICLE_SHADER_GROUP_NAME not in mat.node_tree.nodes:
-            MaterialVisualizer.enable(mat, self)
+            MaterialVisualizer.enable(mat)
 
         if self.single_param:
             sync_param(mat, self.single_param, self.direction)
